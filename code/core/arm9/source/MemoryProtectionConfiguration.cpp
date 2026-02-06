@@ -10,8 +10,8 @@ extern "C" void setupMemoryProtection()
         .WithInstructionAccessPermission(MPU_ACCESS_PERMISSION_PRIV_READ_WRITE)
         .ApplyToRegion(MPU_REGION_0);
 
-    // mpu region 1: Cached Main Memory
-    MemoryProtectionRegionBuilder(0x02000000, MPU_REGION_SIZE_4MB)
+    // mpu region 1: Cached Main Memory (Part 1)
+    MemoryProtectionRegionBuilder(0x02000000, MPU_REGION_SIZE_16MB)
         .WithDataAccessPermission(MPU_ACCESS_PERMISSION_PRIV_READ_WRITE)
         .WithDataCache()
         .ApplyToRegion(MPU_REGION_1);
@@ -23,12 +23,12 @@ extern "C" void setupMemoryProtection()
         .Bufferable()
         .ApplyToRegion(MPU_REGION_2);
 
-    // mpu region 3: Linear part of GBA rom
-    MemoryProtectionRegionBuilder(ROM_LINEAR_DS_ADDRESS, MPU_REGION_SIZE_2MB)
-        .WithDataAccessPermission(MPU_ACCESS_PERMISSION_USER_READ_PRIV_WRITE)
-        .WithInstructionAccessPermission(MPU_ACCESS_PERMISSION_USER_READ_PRIV_WRITE)
-        .WithDataCache()
+    // mpu region 3: Cached Main Memory (Part 2)
+    MemoryProtectionRegionBuilder(0x0D000000, MPU_REGION_SIZE_16MB)
+        .WithDataAccessPermission(MPU_ACCESS_PERMISSION_PRIV_READ_WRITE)
+        .WithInstructionAccessPermission(MPU_ACCESS_PERMISSION_PRIV_READ_WRITE)
         .WithInstructionCache()
+        .WithDataCache()
         .ApplyToRegion(MPU_REGION_MAIN_MEMORY_GBA_ROM);
 
     // mpu region 4: OBJ VRAM (DS)
@@ -61,4 +61,23 @@ extern "C" void setupMemoryProtection()
         .WithInstructionAccessPermission(MPU_ACCESS_PERMISSION_READ_WRITE)
         .WithInstructionCache()
         .ApplyToRegion(MPU_REGION_GBA_EWRAM);
+}
+
+void setupLinearRomMpuRegion()
+{
+    // mpu region 1: Cached Main Memory
+    MemoryProtectionRegionBuilder(0x02000000, MPU_REGION_SIZE_4MB)
+        .WithDataAccessPermission(MPU_ACCESS_PERMISSION_PRIV_READ_WRITE)
+        .WithInstructionAccessPermission(MPU_ACCESS_PERMISSION_PRIV_READ_WRITE)
+        .WithInstructionCache()
+        .WithDataCache()
+        .ApplyToRegion(MPU_REGION_1);
+
+    // mpu region 3: Linear part of GBA rom
+    MemoryProtectionRegionBuilder(ROM_LINEAR_DS_ADDRESS, MPU_REGION_SIZE_2MB)
+        .WithDataAccessPermission(MPU_ACCESS_PERMISSION_USER_READ_PRIV_WRITE)
+        .WithInstructionAccessPermission(MPU_ACCESS_PERMISSION_USER_READ_PRIV_WRITE)
+        .WithDataCache()
+        .WithInstructionCache()
+        .ApplyToRegion(MPU_REGION_MAIN_MEMORY_GBA_ROM);
 }

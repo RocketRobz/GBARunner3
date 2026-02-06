@@ -57,6 +57,10 @@ FATFS gFatFs;
 FIL gFile;
 [[gnu::section(".ewram.bss")]]
 GbaHeader gRomHeader;
+[[gnu::section(".ewram.bss")]]
+u8* preloadAddr;
+[[gnu::section(".ewram.bss")]]
+u32 preloadSize;
 
 [[gnu::section(".vramhi.bss")]]
 u32 gGbaBios[16 * 1024 / 4] alignas(256);
@@ -76,6 +80,7 @@ static PlainLogger sPlainLogger { LogLevel::All, &sIsNitroOutput };
 static NullLogger sNullLogger;
 ILogger* gLogger;
 static SplashScreen* sSplashScreen;
+extern void setupLinearRomMpuRegion();
 
 static void setupLogger()
 {
@@ -196,6 +201,20 @@ static void loadGbaRom(const char* romPath)
     f_read(&gFile, &gRomHeader, sizeof(GbaHeader), &br);
     f_lseek(&gFile, ROM_LINEAR_GBA_ADDRESS - 0x08000000);
     f_read(&gFile, (void*)ROM_LINEAR_DS_ADDRESS, ROM_LINEAR_SIZE, &br);
+    if (Environment::IsDsiMode())
+    {
+        u32 romSize = f_size(&gFile);
+        u32 romPreloadSize = Environment::Has32MBRam() ? ROM_PRELOAD_3DS_SIZE : ROM_PRELOAD_DSI_SIZE;
+
+        preloadAddr = (u8*)ROM_PRELOAD_ADDRESS;
+        preloadSize = (romSize > romPreloadSize ? romPreloadSize : romSize);
+
+        f_lseek(&gFile, 0);
+        f_read(&gFile, preloadAddr - 0x0A000000, ROM_PRELOAD_DSI_SIZE, &br); // Load first 12MB of ROM to the fast area (0x02400000-0x03000000) first
+        if (preloadSize > ROM_PRELOAD_DSI_SIZE) {
+            f_read(&gFile, preloadAddr + ROM_PRELOAD_DSI_SIZE, romSize - ROM_PRELOAD_DSI_SIZE, &br); // Load the rest to the extra RAM area (0x0D000000-0x0E000000) if using a 3DS
+        }
+    }
 
     HarvestMoonPatches().TryApplyPatches(gRomHeader.gameCode);
     if (BadMixerPatch().TryApplyPatch())
@@ -499,6 +518,8 @@ extern "C" void gbaRunnerMain(int argc, char* argv[])
     stopSplashScreenAnimation();
     delete sSplashScreen;
     sSplashScreen = nullptr;
+
+    setupLinearRomMpuRegion();
 
     const auto& displaySettings = gAppSettingsService.GetAppSettings().displaySettings;
     gGbaDisplayConfigurationService.ApplyDisplaySettings(displaySettings);

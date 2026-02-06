@@ -27,6 +27,12 @@ void Environment::Initialize()
     if (((*(vu32*)0x04004000) & 3) == 1)
     {
         _flags |= ENVIRONMENT_FLAGS_DSI_MODE;
+        *(vu32*)0x0D000000 = 0x54534554; // 'TEST'
+        if (*(vu32*)0x0D000000 == 0x54534554)
+        {
+            _flags |= ENVIRONMENT_FLAGS_32MB_RAM;
+            *(vu32*)0x0D000000 = 0;
+        }
     }
     else
     {

@@ -1,4 +1,5 @@
 #include "common.h"
+#include <libtwl/dma/dmaTwl.h>
 #include <string.h>
 #include "Fat/ff.h"
 #include "Fat/diskio.h"
@@ -12,6 +13,7 @@ typedef struct
 {
     vu16 cacheBlock;
     vu32 romBlock;
+    bool loadedFromPreloadedRom;
 } SdcFetch;
 
 static SdcFetch sCurrentFetch;
@@ -37,6 +39,9 @@ static DWORD sClusterTable[512];
 
 // temporarily
 extern FIL gFile;
+
+extern u8* preloadAddr;
+extern u32 preloadSize;
 
 /// @brief Returns a cache block to replace.
 /// @return The index of the cache block to replace.
@@ -74,6 +79,7 @@ static void finishFetch()
 {
     sCacheBlockToRomBlock[sCurrentFetch.cacheBlock] = sCurrentFetch.romBlock;
     sdc_romBlockToCacheBlock[sCurrentFetch.romBlock] = &sdc_cache[sCurrentFetch.cacheBlock][0];
+    sCurrentFetch.loadedFromPreloadedRom = false;
     sCurrentFetch.romBlock = SDC_ROM_BLOCK_INVALID;
     sCurrentFetch.cacheBlock = SDC_BLOCK_INVALID;
     dc_drainWriteBuffer();
@@ -136,11 +142,13 @@ static void fillOutOfBoundsCacheBlock(u32 romBlock, u32 cacheBlock)
 /// @param dst The destination buffer.
 static void* loadRomBlock(u32 romBlock, u32 cacheBlock)
 {
-    u32 sector = getSdSectorOfRomBlock(romBlock);
-
     u32 irqs = fs_waitForCompletionOfCurrentTransaction(true);
     if (isCurrentlyFetching())
     {
+        if (sCurrentFetch.loadedFromPreloadedRom)
+        {
+            dma_twlWait(0);
+        }
         finishFetch();
     }
 
@@ -181,13 +189,26 @@ static void* loadRomBlock(u32 romBlock, u32 cacheBlock)
         sCacheBlockToRomBlock[cacheBlock] = SDC_ROM_BLOCK_INVALID;
     }
 
+    u32 sector = getSdSectorOfRomBlock(romBlock);
+
+    bool loadedFromPreloadedRom = false;
     FsWaitToken waitToken;
     if (sector != 0)
     {
-        fs_readCacheAlignedSectorsAsync(
-            gFile.obj.fs->pdrv == DEV_FAT ? FS_DEVICE_DLDI : FS_DEVICE_DSI_SD,
-            &sdc_cache[cacheBlock][0], sector,
-            SDC_BLOCK_SIZE / 512, &waitToken);
+        if (preloadAddr && (romBlock * SDC_BLOCK_SIZE) < preloadSize)
+        {
+            dc_invalidateRange(&sdc_cache[cacheBlock][0], SDC_BLOCK_SIZE);
+            dma_twlCopy32Async(0, preloadAddr + (romBlock * SDC_BLOCK_SIZE), &sdc_cache[cacheBlock][0], SDC_BLOCK_SIZE);
+            loadedFromPreloadedRom = true;
+        }
+        else
+        {
+            fs_readCacheAlignedSectorsAsync(
+                gFile.obj.fs->pdrv == DEV_FAT ? FS_DEVICE_DLDI : FS_DEVICE_DSI_SD,
+                &sdc_cache[cacheBlock][0], sector,
+                SDC_BLOCK_SIZE / 512, &waitToken);
+        }
+        sCurrentFetch.loadedFromPreloadedRom = loadedFromPreloadedRom;
         sCurrentFetch.romBlock = romBlock;
         sCurrentFetch.cacheBlock = cacheBlock;
     }
@@ -202,12 +223,23 @@ static void* loadRomBlock(u32 romBlock, u32 cacheBlock)
     arm_restoreIrqs(irqs);
     if (sector != 0)
     {
-        irqs = fs_waitForCompletion(&waitToken, true);
-        if (sCurrentFetch.romBlock == romBlock)
+        if (sCurrentFetch.loadedFromPreloadedRom)
         {
-            finishFetch();
+            dma_twlWait(0);
+            if (sCurrentFetch.romBlock == romBlock)
+            {
+            	finishFetch();
+            }
         }
-        arm_restoreIrqs(irqs);
+        else
+        {
+            irqs = fs_waitForCompletion(&waitToken, true);
+            if (sCurrentFetch.romBlock == romBlock)
+            {
+            	finishFetch();
+            }
+            arm_restoreIrqs(irqs);
+        }
     }
     else
     {

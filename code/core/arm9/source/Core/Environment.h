@@ -13,7 +13,8 @@ class Environment
         ENVIRONMENT_FLAGS_AGB_SEMIHOSTING = (1 << 4),
         ENVIRONMENT_FLAGS_DLDI = (1 << 5),
         ENVIRONMENT_FLAGS_ARGV = (1 << 6),
-        ENVIRONMENT_FLAGS_PICO_AGB_ADAPTER = (1 << 7)
+        ENVIRONMENT_FLAGS_PICO_AGB_ADAPTER = (1 << 7),
+        ENVIRONMENT_FLAGS_32MB_RAM = (1 << 8)
     };
 
     static u32 _flags;
@@ -29,4 +30,5 @@ public:
     static inline bool SupportsDldi() { return _flags & ENVIRONMENT_FLAGS_DLDI; }
     static inline bool SupportsArgv() { return _flags & ENVIRONMENT_FLAGS_ARGV; }
     static inline bool HasPicoAgbAdapter() { return _flags & ENVIRONMENT_FLAGS_PICO_AGB_ADAPTER; }
+    static inline bool Has32MBRam() { return _flags & ENVIRONMENT_FLAGS_32MB_RAM; }
 };
